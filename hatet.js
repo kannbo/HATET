@@ -3,34 +3,39 @@ class AAADConverter {
         this.styles = {};
     }
 
-    parseAAAD() {
-        const aaadTags = document.querySelectorAll('AAAD');
-        aaadTags.forEach(tag => {
-            const cssText = tag.textContent;
-            const lines = cssText.split('\n');
-            let css = '';
+parseAHT() {
+    const ahtTags = document.querySelectorAll('AHT');
+    ahtTags.forEach(tag => {
+        const htmlText = tag.textContent;
+        const regex = /@(\w+)(\(([^)]+)\))?\s*{([^}]+)}/g;
+        let match;
 
-            lines.forEach(line => {
-                line = line.trim();
-                if (line.startsWith('!')) {
-                    css += line.slice(1).trim() + ' { ';
-                } else if (line === '@') {
-                    css += '}\n';
-                } else if (line.includes(' ')) {
-                    const [property, ...value] = line.split(' ');
-                    css += `${property}: ${value.join(' ')}; `;
-                }
-            });
+        const fragment = document.createDocumentFragment();
+        while ((match = regex.exec(htmlText)) !== null) {
+            const tagName = match[1];
+            const attributesString = match[3];
+            const content = match[4].trim();
 
-            // Create a style element and append the CSS
-            const styleTag = document.createElement('style');
-            styleTag.textContent = css;
-            document.head.appendChild(styleTag);
+            const element = document.createElement(tagName);
 
-            // Remove the original AAAD tag
-            tag.remove();
-        });
-    }
+            if (attributesString) {
+                const attributes = attributesString.split(',').map(attr => attr.trim());
+                attributes.forEach(attr => {
+                    const [name, value] = attr.split('=').map(s => s.trim());
+                    element.setAttribute(name, value.replace(/"/g, ''));
+                });
+            }
+
+            // Process nested AHT tags within the current content
+            const innerContent = this.processNestedAHT(content);
+            element.innerHTML = innerContent;
+            fragment.appendChild(element);
+        }
+
+        // Replace the AHT tag with the created elements
+        tag.parentNode.replaceChild(fragment, tag);
+    });
+}
 }
 
 class AHTConverter {
