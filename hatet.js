@@ -51,49 +51,46 @@ class AHTConverter {
         let currentElement = fragment;
         let lastIndex = 0;
 
-        const regex = /@(\w+)(\(([^)]+)\))?\s*{([^{}]*)}/g;
+        const regex = /@(\w+)(\(([^)]+)\))?\s*{([^}]*)}/g;
+        let match;
 
-        while (lastIndex < content.length) {
-            regex.lastIndex = lastIndex;
-            const match = regex.exec(content);
-
-            if (match) {
-                // Add text node for content before the match
-                if (match.index > lastIndex) {
-                    const text = content.slice(lastIndex, match.index).trim();
-                    if (text) {
-                        currentElement.appendChild(document.createTextNode(text));
-                    }
+        while ((match = regex.exec(content)) !== null) {
+            // Add text node for content before the match
+            if (match.index > lastIndex) {
+                const text = content.slice(lastIndex, match.index).trim();
+                if (text) {
+                    currentElement.appendChild(document.createTextNode(text));
                 }
+            }
 
-                const tagName = match[1];
-                const attributesString = match[3];
-                const innerContent = match[4].trim();
+            const tagName = match[1];
+            const attributesString = match[3];
+            const innerContent = match[4].trim();
 
-                const newElement = document.createElement(tagName);
-                this.setAttributes(newElement, attributesString);
+            const newElement = document.createElement(tagName);
+            this.setAttributes(newElement, attributesString);
 
+            if (innerContent.includes('@')) {
+                // Push current element to stack
+                stack.push(currentElement);
                 currentElement.appendChild(newElement);
-
-                // If there is more content within the same tag, continue recursively
-                if (innerContent.includes('@')) {
-                    stack.push(currentElement);
-                    currentElement = newElement;
-                } else {
-                    newElement.innerHTML = innerContent;
-                }
-
-                lastIndex = regex.lastIndex;
+                currentElement = newElement;
+                lastIndex = match.index + match[0].length;
+                regex.lastIndex = lastIndex;
+                continue;
             } else {
-                // Add remaining text nodes and close elements as needed
-                const remainingContent = content.slice(lastIndex).trim();
-                if (remainingContent) {
-                    currentElement.appendChild(document.createTextNode(remainingContent));
-                }
-                if (stack.length > 0) {
-                    currentElement = stack.pop();
-                }
-                break;
+                newElement.innerHTML = innerContent;
+                currentElement.appendChild(newElement);
+            }
+
+            lastIndex = regex.lastIndex;
+        }
+
+        // Add remaining text nodes and close elements as needed
+        if (lastIndex < content.length) {
+            const remainingText = content.slice(lastIndex).trim();
+            if (remainingText) {
+                currentElement.appendChild(document.createTextNode(remainingText));
             }
         }
 
@@ -114,64 +111,27 @@ class AHTConverter {
     }
 }
 
-
-class HatetFramework {
-    constructor() {
-        this.aaadConverter = new AAADConverter();
-        this.ahtConverter = new AHTConverter();
-    }
-
-    loadAll() {
-        this.aaadConverter.parseAAAD();
-        this.ahtConverter.parseAHT();
-    }
-}
-
-// Usage
-const hatetFramework = new HatetFramework();
-hatetFramework.loadAll();
-
 class TemplateSystem {
-  constructor() {
-    this.values = {};
-  }
+    constructor() {
+        this.values = {};
+    }
 
-  setValue(key, value) {
-    this.values[key] = value;
-    this.updateTemplates();
-  }
+    setValue(key, value) {
+        this.values[key] = value;
+        this.updateTemplates();
+    }
 
-  updateTemplates() {
-    const templates = document.querySelectorAll('[template-value]');
-    templates.forEach(template => {
-      const key = template.getAttribute('template-value');
-      if (this.values[key] !== undefined) {
-        template.textContent = this.values[key];
-      }
-    });
-  }
+    updateTemplates() {
+        const templates = document.querySelectorAll('[template-value]');
+        templates.forEach(template => {
+            const key = template.getAttribute('template-value');
+            if (this.values[key] !== undefined) {
+                template.textContent = this.values[key];
+            }
+        });
+    }
 }
-class HATETFramework {
-  constructor() {
-    this.aaadParser = new AAADParser();
-    this.ahtParser = new AHTParser();
-    this.templateSystem = new TemplateSystem();
-  }
 
-  loadAAAD(cssText) {
-    this.aaadParser.parse(cssText);
-    this.aaadParser.applyStyles();
-  }
-
-  loadAHT(htmlText, container) {
-    const elements = this.ahtParser.parse(htmlText);
-    this.ahtParser.render(elements, container);
-  }
-
-  setTemplateValue(key, value) {
-    this.templateSystem.setValue(key, value);
-  }
-}
 class CValue {
     constructor() {
         this.root = document.documentElement;
@@ -206,3 +166,38 @@ class CValue {
         this.set(name, newValue);
     }
 }
+
+class HatetFramework {
+    constructor() {
+        this.aaadConverter = new AAADConverter();
+        this.ahtConverter = new AHTConverter();
+        this.templateSystem = new TemplateSystem();
+        this.cValue = new CValue();
+    }
+
+    loadAll() {
+        this.aaadConverter.parseAAAD();
+        this.ahtConverter.parseAHT();
+    }
+
+    setTemplateValue(key, value) {
+        this.templateSystem.setValue(key, value);
+    }
+
+    setCValue(name, value) {
+        this.cValue.set(name, value);
+    }
+
+    getCValue(name) {
+        return this.cValue.get(name);
+    }
+
+    updateCValue(name, func) {
+        this.cValue.update(name, func);
+    }
+}
+
+// Usage
+const hatetFramework = new HatetFramework();
+hatetFramework.loadAll();
+
