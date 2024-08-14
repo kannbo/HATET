@@ -3,39 +3,34 @@ class AAADConverter {
         this.styles = {};
     }
 
-parseAHT() {
-    const ahtTags = document.querySelectorAll('AHT');
-    ahtTags.forEach(tag => {
-        const htmlText = tag.textContent;
-        const regex = /@(\w+)(\(([^)]+)\))?\s*{([^}]+)}/g;
-        let match;
+    parseAAAD() {
+        const aaadTags = document.querySelectorAll('AAAD');
+        aaadTags.forEach(tag => {
+            const cssText = tag.textContent;
+            const lines = cssText.split('\n');
+            let css = '';
 
-        const fragment = document.createDocumentFragment();
-        while ((match = regex.exec(htmlText)) !== null) {
-            const tagName = match[1];
-            const attributesString = match[3];
-            const content = match[4].trim();
+            lines.forEach(line => {
+                line = line.trim();
+                if (line.startsWith('!')) {
+                    css += line.slice(1).trim() + ' { ';
+                } else if (line === '@') {
+                    css += '}\n';
+                } else if (line.includes(' ')) {
+                    const [property, ...value] = line.split(' ');
+                    css += `${property}: ${value.join(' ')}; `;
+                }
+            });
 
-            const element = document.createElement(tagName);
+            // Create a style element and append the CSS
+            const styleTag = document.createElement('style');
+            styleTag.textContent = css;
+            document.head.appendChild(styleTag);
 
-            if (attributesString) {
-                const attributes = attributesString.split(',').map(attr => attr.trim());
-                attributes.forEach(attr => {
-                    const [name, value] = attr.split('=').map(s => s.trim());
-                    element.setAttribute(name, value.replace(/"/g, ''));
-                });
-            }
-
-            // Process nested AHT tags within the current content
-            const innerContent = this.processNestedAHT(content);
-            element.innerHTML = innerContent;
-            fragment.appendChild(element);
-        }
-
-        // Replace the AHT tag with the created elements
-        tag.parentNode.replaceChild(fragment, tag);
-    });
-}
+            // Remove the original AAAD tag
+            tag.remove();
+        });
+    }
 }
 
 class AHTConverter {
@@ -45,53 +40,77 @@ class AHTConverter {
         const ahtTags = document.querySelectorAll('AHT');
         ahtTags.forEach(tag => {
             const htmlText = tag.textContent;
-            const regex = /@(\w+)(\(([^)]+)\))?\s*{([^}]+)}/g;
-            let match;
-
             const fragment = document.createDocumentFragment();
-            while ((match = regex.exec(htmlText)) !== null) {
-                const tagName = match[1];
-                const attributesString = match[3];
-                const content = match[4].trim();
-
-                const element = document.createElement(tagName);
-
-                if (attributesString) {
-                    const attributes = attributesString.split(',').map(attr => attr.trim());
-                    attributes.forEach(attr => {
-                        const [name, value] = attr.split('=').map(s => s.trim());
-                        element.setAttribute(name, value.replace(/"/g, ''));
-                    });
-                }
-
-                // Process nested AHT tags within the current content
-                const innerContent = this.processNestedAHT(content);
-                element.innerHTML = innerContent;
-                fragment.appendChild(element);
-            }
-
-            // Replace the AHT tag with the created elements
+            this.processNestedAHT(htmlText, fragment);
             tag.parentNode.replaceChild(fragment, tag);
         });
     }
 
-    processNestedAHT(content) {
-        const regex = /@(\w+)(\(([^)]+)\))?\s*{([^}]+)}/g;
-        return content.replace(regex, (match, tagName, _, attributesString, innerContent) => {
-            const element = document.createElement(tagName);
-            
-            if (attributesString) {
-                const attributes = attributesString.split(',').map(attr => attr.trim());
-                attributes.forEach(attr => {
-                    const [name, value] = attr.split('=').map(s => s.trim());
-                    element.setAttribute(name, value.replace(/"/g, ''));
-                });
-            }
+    processNestedAHT(content, fragment) {
+        const regex = /@(\w+)(\(([^)]+)\))?\s*{([^{}]*)}/g;
+        let lastIndex = 0;
+        const stack = [];
 
-            // Recursively process nested AHT content
-            element.innerHTML = this.processNestedAHT(innerContent.trim());
-            return element.outerHTML;
-        });
+        while (lastIndex < content.length) {
+            const match = regex.exec(content);
+
+            if (match) {
+                const tagName = match[1];
+                const attributesString = match[3];
+                const innerContent = match[4];
+
+                if (stack.length === 0) {
+                    if (match.index > lastIndex) {
+                        const text = content.slice(lastIndex, match.index);
+                        fragment.appendChild(document.createTextNode(text));
+                    }
+
+                    const element = document.createElement(tagName);
+                    this.setAttributes(element, attributesString);
+                    stack.push({ element, startIndex: regex.lastIndex });
+                } else {
+                    stack[stack.length - 1].element.innerHTML += content.slice(lastIndex, match.index);
+                    const nestedElement = document.createElement(tagName);
+                    this.setAttributes(nestedElement, attributesString);
+                    stack.push({ element: nestedElement, startIndex: regex.lastIndex });
+                }
+
+                lastIndex = regex.lastIndex;
+            } else {
+                if (stack.length > 0) {
+                    const { element, startIndex } = stack.pop();
+                    element.innerHTML += content.slice(startIndex);
+                    if (stack.length === 0) {
+                        fragment.appendChild(element);
+                    } else {
+                        stack[stack.length - 1].element.appendChild(element);
+                    }
+                } else {
+                    fragment.appendChild(document.createTextNode(content.slice(lastIndex)));
+                }
+                break;
+            }
+        }
+
+        while (stack.length > 0) {
+            const { element, startIndex } = stack.pop();
+            element.innerHTML += content.slice(startIndex);
+            if (stack.length === 0) {
+                fragment.appendChild(element);
+            } else {
+                stack[stack.length - 1].element.appendChild(element);
+            }
+        }
+    }
+
+    setAttributes(element, attributesString) {
+        if (attributesString) {
+            const attributes = attributesString.split(',').map(attr => attr.trim());
+            attributes.forEach(attr => {
+                const [name, value] = attr.split('=').map(s => s.trim());
+                element.setAttribute(name, value.replace(/"/g, ''));
+            });
+        }
     }
 }
 
