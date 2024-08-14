@@ -47,59 +47,59 @@ class AHTConverter {
     }
 
     processNestedAHT(content, fragment) {
-        const regex = /@(\w+)(\(([^)]+)\))?\s*{([^{}]*)}/g;
-        let lastIndex = 0;
         const stack = [];
+        let currentElement = fragment;
+        let lastIndex = 0;
+
+        const regex = /@(\w+)(\(([^)]+)\))?\s*{([^{}]*)}/g;
 
         while (lastIndex < content.length) {
+            regex.lastIndex = lastIndex;
             const match = regex.exec(content);
 
             if (match) {
+                // Add text node for content before the match
+                if (match.index > lastIndex) {
+                    const text = content.slice(lastIndex, match.index).trim();
+                    if (text) {
+                        currentElement.appendChild(document.createTextNode(text));
+                    }
+                }
+
                 const tagName = match[1];
                 const attributesString = match[3];
-                const innerContent = match[4];
+                const innerContent = match[4].trim();
 
-                if (stack.length === 0) {
-                    if (match.index > lastIndex) {
-                        const text = content.slice(lastIndex, match.index);
-                        fragment.appendChild(document.createTextNode(text));
-                    }
+                const newElement = document.createElement(tagName);
+                this.setAttributes(newElement, attributesString);
 
-                    const element = document.createElement(tagName);
-                    this.setAttributes(element, attributesString);
-                    stack.push({ element, startIndex: regex.lastIndex });
+                currentElement.appendChild(newElement);
+
+                // If there is more content within the same tag, continue recursively
+                if (innerContent.includes('@')) {
+                    stack.push(currentElement);
+                    currentElement = newElement;
                 } else {
-                    stack[stack.length - 1].element.innerHTML += content.slice(lastIndex, match.index);
-                    const nestedElement = document.createElement(tagName);
-                    this.setAttributes(nestedElement, attributesString);
-                    stack.push({ element: nestedElement, startIndex: regex.lastIndex });
+                    newElement.innerHTML = innerContent;
                 }
 
                 lastIndex = regex.lastIndex;
             } else {
+                // Add remaining text nodes and close elements as needed
+                const remainingContent = content.slice(lastIndex).trim();
+                if (remainingContent) {
+                    currentElement.appendChild(document.createTextNode(remainingContent));
+                }
                 if (stack.length > 0) {
-                    const { element, startIndex } = stack.pop();
-                    element.innerHTML += content.slice(startIndex);
-                    if (stack.length === 0) {
-                        fragment.appendChild(element);
-                    } else {
-                        stack[stack.length - 1].element.appendChild(element);
-                    }
-                } else {
-                    fragment.appendChild(document.createTextNode(content.slice(lastIndex)));
+                    currentElement = stack.pop();
                 }
                 break;
             }
         }
 
+        // Handle any remaining unclosed elements
         while (stack.length > 0) {
-            const { element, startIndex } = stack.pop();
-            element.innerHTML += content.slice(startIndex);
-            if (stack.length === 0) {
-                fragment.appendChild(element);
-            } else {
-                stack[stack.length - 1].element.appendChild(element);
-            }
+            currentElement = stack.pop();
         }
     }
 
@@ -113,6 +113,7 @@ class AHTConverter {
         }
     }
 }
+
 
 class HatetFramework {
     constructor() {
